@@ -4,7 +4,8 @@ const { chromium } = require('playwright');
 const path = require('path');
 const fs = require('fs');
 
-const BASE = 'http://localhost:8123/src/';
+// по умолчанию локальный сервер; BASE=... снимает опубликованную версию
+const BASE = process.env.BASE || 'http://localhost:8123/src/';
 const OUT  = path.join(__dirname, 'renders', 'web');
 
 // камера и точка взгляда в координатах three.js
