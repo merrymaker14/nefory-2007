@@ -16,7 +16,7 @@
   1.6,
   1.2
  ],
- "spawnYaw": -2.45,
+ "spawnYaw": 1.116,
  "eyeHeight": 1.6,
  "playerRadius": 0.26,
  "colliders": [
@@ -247,5 +247,11 @@
  "lightmaps": {
   "on": "room_lm_on.jpg",
   "off": "room_lm_off.jpg"
- }
+ },
+ "lightmapsMobile": {
+  "on": "room_lm_on_2k.jpg",
+  "off": "room_lm_off_2k.jpg"
+ },
+ "backdrop": "backdrop_yard.jpg",
+ "backdropMobile": "backdrop_yard_1k.jpg"
 }
