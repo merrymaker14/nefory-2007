@@ -194,9 +194,15 @@ const TEXDIR    = '../assets/textures/';
 const P    = new URLSearchParams(location.search);
 const SHOT = P.has('shot');
 
-// Телефон тянет сцену только на облегчённых текстурах: 4096 разворачивается
-// в видеопамяти в 64 МБ, 2048 — в 16.
-const TOUCH = !SHOT && (matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0);
+// Определяем телефон по ОСНОВНОМУ указателю, а не по наличию сенсора вообще:
+// ноутбуки с сенсорным экраном сообщают maxTouchPoints > 0, но управляются мышью.
+// coarse — основной указатель грубый (палец), any-pointer:fine — есть ли где-то мышь.
+const COARSE = matchMedia('(pointer: coarse)').matches;
+const HAS_MOUSE = matchMedia('(any-pointer: fine)').matches;
+const forced = P.get('touch');                       // ?touch=1 / ?touch=0 — ручное переключение
+const TOUCH = !SHOT && (forced === '1' ? true
+                      : forced === '0' ? false
+                      : (COARSE && (!HAS_MOUSE || navigator.maxTouchPoints > 1)));
 if (TOUCH) document.body.classList.add('touch');
 
 const $ = id => document.getElementById(id);
