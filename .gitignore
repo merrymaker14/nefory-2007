@@ -1,0 +1,19 @@
+# зависимости
+node_modules/
+
+# исходники Blender — тяжёлые, в веб-сборке не нужны
+blender/
+*.blend
+*.blend1
+
+# промежуточные рендеры и референсы
+renders/
+refs/
+
+# текстуры, нужные только для запекания в Blender, в вебе не грузятся
+assets/textures/room_lightmap.png
+assets/textures/label_*.png
+
+# служебное
+.DS_Store
+Thumbs.db

@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Неформалы 2007 — комната</title>
+<style>
+  :root { color-scheme: dark; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; background:#07070a; }
+  body { font:14px/1.45 "Segoe UI", system-ui, sans-serif; color:#e8e4dc; }
+  canvas { display:block; }
+
+  #vignette {
+    position:fixed; inset:0; pointer-events:none; z-index:5; mix-blend-mode:multiply;
+    background:radial-gradient(ellipse 78% 68% at 50% 50%, rgba(0,0,0,0) 42%, rgba(0,0,0,.60) 100%);
+  }
+  #grain {
+    position:fixed; inset:0; pointer-events:none; z-index:6; opacity:.05;
+    background-image:url("data:image/svg+xml;utf8,\
+<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'>\
+<filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3'/></filter>\
+<rect width='120' height='120' filter='url(%23n)'/></svg>");
+  }
+
+  #crosshair {
+    position:fixed; left:50%; top:50%; width:5px; height:5px; z-index:7;
+    margin:-2.5px 0 0 -2.5px; border-radius:50%;
+    background:rgba(255,255,255,.5); box-shadow:0 0 3px rgba(0,0,0,.9);
+    opacity:0; transition:opacity .2s, transform .16s, background .16s;
+  }
+  body.locked #crosshair { opacity:1; }
+  body.locked #crosshair.hot { transform:scale(1.9); background:rgba(255,238,190,.95); }
+
+  /* подсказка действия */
+  #prompt {
+    position:fixed; left:50%; top:calc(50% + 42px); transform:translateX(-50%) translateY(6px);
+    z-index:8; opacity:0; transition:opacity .16s, transform .16s; pointer-events:none;
+    display:flex; align-items:center; gap:9px; white-space:nowrap;
+    padding:7px 14px 7px 9px; border-radius:6px;
+    background:rgba(12,10,14,.72); border:1px solid rgba(255,255,255,.13);
+    backdrop-filter:blur(3px); font-size:13.5px; color:#efe9dd;
+    text-shadow:0 1px 3px rgba(0,0,0,.9);
+  }
+  #prompt.on { opacity:1; transform:translateX(-50%) translateY(0); }
+  #prompt .key {
+    display:inline-flex; align-items:center; justify-content:center;
+    min-width:26px; height:26px; padding:0 7px; border-radius:4px; font-weight:700; font-size:13px;
+    background:linear-gradient(#3a332b,#231e19); border:1px solid rgba(255,255,255,.22);
+    box-shadow:0 1px 0 rgba(255,255,255,.10) inset, 0 2px 3px rgba(0,0,0,.5);
+    color:#ffe9bd;
+  }
+
+  #hud {
+    position:fixed; left:14px; top:12px; z-index:7; opacity:0; transition:opacity .25s;
+    font-size:12px; color:#cfc8bd; text-shadow:0 1px 3px rgba(0,0,0,.95); line-height:1.75;
+  }
+  body.locked #hud { opacity:.7; }
+  #hud .k {
+    display:inline-block; min-width:20px; padding:0 5px; margin-right:5px;
+    border:1px solid rgba(255,255,255,.26); border-radius:3px;
+    background:rgba(255,255,255,.06); text-align:center;
+  }
+
+  #start {
+    position:fixed; inset:0; z-index:20; display:flex; align-items:center; justify-content:center;
+    background:radial-gradient(ellipse at 50% 45%, #16131c 0%, #08080b 70%);
+    transition:opacity .35s; text-align:center; padding:24px;
+  }
+  #start.hide { opacity:0; pointer-events:none; }
+  #start h1 { font-size:26px; font-weight:600; margin-bottom:6px; color:#f2ede4; }
+  #start .sub { color:#8d8578; font-size:13px; margin-bottom:22px; }
+  #start .go {
+    display:inline-block; padding:11px 30px; border-radius:5px; cursor:pointer;
+    border:1px solid #4b453c; background:#221e1a; color:#f0e9dd; font-size:14px;
+    transition:background .18s, border-color .18s;
+  }
+  #start .go:hover { background:#2e2823; border-color:#6d6458; }
+  #start .keys { margin-top:20px; color:#7d766a; font-size:12px; line-height:1.9; }
+  #bar { width:230px; height:2px; background:#241f1a; margin:20px auto 0; overflow:hidden; }
+  #bar i { display:block; height:100%; width:0; background:#8a7a5e; transition:width .25s; }
+  #err { color:#c96a5a; font-size:12px; margin-top:14px; min-height:16px; max-width:420px; }
+
+  #stats {
+    position:fixed; right:12px; bottom:10px; z-index:7; font-size:11px;
+    color:#6f6a60; opacity:0; transition:opacity .25s; text-shadow:0 1px 2px #000;
+  }
+  body.locked #stats { opacity:.8; }
+
+  /* режим съёмки: убрать интерфейс, оставить только кадр */
+  body.shot #hud, body.shot #stats, body.shot #crosshair,
+  body.shot #prompt, body.shot #start { display:none !important; }
+</style>
+</head>
+<body>
+
+<div id="vignette"></div>
+<div id="grain"></div>
+<div id="crosshair"></div>
+<div id="prompt"><span class="key">E</span><span id="promptText">включить монитор</span></div>
+
+<div id="hud">
+  <div><span class="k">W A S D</span> идти · <span class="k">⇧</span> бегом · <span class="k">C</span> присесть</div>
+  <div><span class="k">E</span> действие · <span class="k">Esc</span> отпустить мышь</div>
+</div>
+
+<div id="stats">—</div>
+
+<div id="start">
+  <div>
+    <h1>Комната. Осень 2007.</h1>
+    <div class="sub">Свет запечён в Blender. Подойди к столу и нажми E.</div>
+    <div class="go" id="go">Войти</div>
+    <div class="keys">
+      W A S D — идти · мышь — смотреть · Shift — бегом<br>
+      C — присесть · E — действие · Esc — выйти
+    </div>
+    <div id="bar"><i></i></div>
+    <div id="err"></div>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+
+const MODEL     = '../assets/models/room_emo.glb';
+const COLLIDERS = '../assets/models/room_emo_colliders.json';
+const BACKDROP  = '../assets/textures/backdrop_yard.png';
+const TEXDIR    = '../assets/textures/';
+
+const SHOT_P = new URLSearchParams(location.search);
+const SHOT   = SHOT_P.has('shot');
+
+const $ = id => document.getElementById(id);
+const els = { start:$('start'), go:$('go'), bar:document.querySelector('#bar i'), err:$('err'),
+              stats:$('stats'), prompt:$('prompt'), promptText:$('promptText'),
+              cross:$('crosshair') };
+
+// ============================== рендерер ==============================
+const renderer = new THREE.WebGLRenderer({ antialias:true, powerPreference:'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.NoToneMapping;     // кривая уже вшита в лайтмап
+document.body.appendChild(renderer.domElement);
+
+const scene  = new THREE.Scene();
+scene.background = new THREE.Color(0x05060a);
+// 55° по вертикали ≈ 85° по горизонтали — близко к человеческому.
+// Широкий угол визуально уменьшает предметы и создаёт ощущение, что игрок великан.
+const FOV = Number(new URLSearchParams(location.search).get('fov')) || 55;
+const camera = new THREE.PerspectiveCamera(FOV, innerWidth/innerHeight, 0.02, 60);
+addEventListener('resize', () => {
+  camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ============================== управление ==============================
+const controls = new PointerLockControls(camera, renderer.domElement);
+scene.add(controls.object);
+els.go.addEventListener('click', () => controls.lock());
+controls.addEventListener('lock',   () => { document.body.classList.add('locked');    els.start.classList.add('hide'); });
+controls.addEventListener('unlock', () => { document.body.classList.remove('locked'); els.start.classList.remove('hide'); });
+
+const keys = Object.create(null);
+addEventListener('keydown', e => {
+  if (!keys[e.code] && e.code === 'KeyE') tryInteract();
+  keys[e.code] = true;
+});
+addEventListener('keyup', e => { keys[e.code] = false; });
+
+// ============================== свет монитора ==============================
+// Комната запечена и рисуется без освещения, поэтому обычная лампа three.js
+// на неё не подействует. Вшиваем свой источник прямо в шейдер материала.
+const screenLight = {
+  pos:   new THREE.Vector3(),
+  color: new THREE.Color(0x7ea6e6),
+  power: { value: 0.0 },
+  range: { value: 3.2 },
+};
+const uni = {
+  uScreenPos:   { value: screenLight.pos },
+  uScreenColor: { value: new THREE.Vector3() },
+  uScreenPower: screenLight.power,
+  uScreenRange: screenLight.range,
+};
+
+function patchRoomMaterial(mat) {
+  mat.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, uni);
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>',
+        '#include <common>\nvarying vec3 vWPos;\nvarying vec3 vWNrm;')
+      .replace('#include <begin_vertex>',
+        '#include <begin_vertex>\n' +
+        'vWPos = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;\n' +
+        'vWNrm = normalize( mat3( modelMatrix ) * normal );');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>',
+        '#include <common>\nvarying vec3 vWPos;\nvarying vec3 vWNrm;\n' +
+        'uniform vec3 uScreenPos;\nuniform vec3 uScreenColor;\n' +
+        'uniform float uScreenPower;\nuniform float uScreenRange;')
+      .replace('#include <opaque_fragment>', `
+        if ( uScreenPower > 0.001 ) {
+          vec3  L   = uScreenPos - vWPos;
+          float d   = length( L );
+          float att = pow( clamp( 1.0 - d / uScreenRange, 0.0, 1.0 ), 2.2 );
+          float ndl = max( dot( normalize( vWNrm ), L / max( d, 1e-4 ) ), 0.0 );
+          outgoingLight += uScreenColor * uScreenPower * att * ( 0.22 + 0.78 * ndl )
+                           * diffuseColor.rgb * 2.4;
+        }
+        #include <opaque_fragment>`);
+  };
+  mat.customProgramCacheKey = () => 'roomScreenLight';
+}
+
+// ============================== экран монитора ==============================
+const SCR_W = 512, SCR_H = 400;
+const scrCanvas = document.createElement('canvas');
+scrCanvas.width = SCR_W; scrCanvas.height = SCR_H;
+const g = scrCanvas.getContext('2d');
+const scrTex = new THREE.CanvasTexture(scrCanvas);
+scrTex.colorSpace = THREE.SRGBColorSpace;
+scrTex.minFilter = THREE.LinearFilter;
+
+let bootT = 0;                       // прогрев кинескопа
+
+function drawScreen(t, on) {
+  g.setTransform(1,0,0,1,0,0);
+  if (!on) { g.fillStyle = '#050608'; g.fillRect(0,0,SCR_W,SCR_H); return; }
+
+  // прогрев: белая полоса разворачивается в кадр
+  if (bootT < 1) {
+    const k = bootT;
+    g.fillStyle = '#000'; g.fillRect(0,0,SCR_W,SCR_H);
+    const h = Math.max(2, SCR_H * Math.pow(k, 2.2));
+    const y = (SCR_H - h) / 2;
+    const grad = g.createLinearGradient(0, y, 0, y + h);
+    grad.addColorStop(0, 'rgba(190,220,255,0)');
+    grad.addColorStop(.5, 'rgba(235,245,255,' + (0.95 - k * 0.7) + ')');
+    grad.addColorStop(1, 'rgba(190,220,255,0)');
+    g.fillStyle = grad; g.fillRect(0, y, SCR_W, h);
+    if (k < 0.55) return;
+    g.globalAlpha = (k - 0.55) / 0.45;
+  }
+
+  // рабочий стол
+  const bg = g.createLinearGradient(0, 0, 0, SCR_H);
+  bg.addColorStop(0, '#123b52'); bg.addColorStop(1, '#0a2233');
+  g.fillStyle = bg; g.fillRect(0, 0, SCR_W, SCR_H);
+
+  // ярлыки
+  g.font = '11px Tahoma, sans-serif'; g.textAlign = 'center';
+  const icons = [['#c8a24a','Мои\nдокументы'], ['#7fb3d5','Мой\nкомпьютер'], ['#8fc98f','Корзина']];
+  icons.forEach(([c, name], i) => {
+    const x = 34, y = 26 + i * 62;
+    g.fillStyle = c; g.fillRect(x - 13, y - 13, 26, 22);
+    g.fillStyle = 'rgba(255,255,255,.25)'; g.fillRect(x - 13, y - 13, 26, 5);
+    g.fillStyle = '#dfe9ef';
+    name.split('\n').forEach((l, j) => g.fillText(l, x, y + 22 + j * 12));
+  });
+
+  // окно плеера с эквалайзером
+  const wx = 96, wy = 54, ww = 300, wh = 150;
+  g.fillStyle = '#20262e'; g.fillRect(wx, wy, ww, wh);
+  g.strokeStyle = '#4a5560'; g.lineWidth = 1; g.strokeRect(wx + .5, wy + .5, ww - 1, wh - 1);
+  const tb = g.createLinearGradient(wx, wy, wx, wy + 18);
+  tb.addColorStop(0, '#3d5a78'); tb.addColorStop(1, '#22354a');
+  g.fillStyle = tb; g.fillRect(wx + 1, wy + 1, ww - 2, 17);
+  g.textAlign = 'left'; g.font = 'bold 11px Tahoma, sans-serif'; g.fillStyle = '#e8f0f7';
+  g.fillText('плеер  —  playlist.m3u', wx + 8, wy + 13);
+  g.fillStyle = '#c0392b'; g.fillRect(wx + ww - 17, wy + 4, 11, 10);
+
+  g.font = '12px Tahoma, sans-serif'; g.fillStyle = '#8fe08f';
+  const track = 'Кино — Группа крови';
+  const shift = (t * 26) % (ww + 140);
+  g.save(); g.beginPath(); g.rect(wx + 8, wy + 24, ww - 16, 16); g.clip();
+  g.fillText(track, wx + ww - shift, wy + 36);
+  g.restore();
+
+  const bars = 28, bw = (ww - 24) / bars;
+  for (let i = 0; i < bars; i++) {
+    const v = (Math.sin(t * 5.5 + i * 0.7) * 0.5 + 0.5) *
+              (Math.sin(t * 2.1 + i * 0.28) * 0.35 + 0.65);
+    const bh = 6 + v * 74;
+    const gr = g.createLinearGradient(0, wy + wh - 14 - bh, 0, wy + wh - 14);
+    gr.addColorStop(0, '#8ef0a8'); gr.addColorStop(.55, '#5fc46f'); gr.addColorStop(1, '#2c7a3c');
+    g.fillStyle = gr;
+    g.fillRect(wx + 12 + i * bw, wy + wh - 14 - bh, bw - 2, bh);
+  }
+
+  // окно аськи
+  const qx = 300, qy = 214, qw = 190, qh = 118;
+  g.fillStyle = '#e8e6df'; g.fillRect(qx, qy, qw, qh);
+  g.fillStyle = '#5f7fa8'; g.fillRect(qx, qy, qw, 16);
+  g.fillStyle = '#fff'; g.font = 'bold 10px Tahoma, sans-serif';
+  g.fillText('Никита (Панк)', qx + 6, qy + 12);
+  g.fillStyle = '#2c2c2c'; g.font = '10px Tahoma, sans-serif';
+  ['Никита: ну чё, идёшь?', 'Никита: на трубе все уже', 'я: щас, только оденусь']
+    .forEach((l, i) => g.fillText(l, qx + 6, qy + 32 + i * 14));
+  if (Math.sin(t * 4) > 0) { g.fillStyle = '#2c2c2c'; g.fillRect(qx + 62, qy + 68, 5, 10); }
+
+  // панель задач
+  g.fillStyle = '#1e3a5f'; g.fillRect(0, SCR_H - 26, SCR_W, 26);
+  g.fillStyle = '#3d8b3d'; g.fillRect(4, SCR_H - 22, 52, 18);
+  g.fillStyle = '#fff'; g.font = 'bold 11px Tahoma, sans-serif';
+  g.fillText('пуск', 16, SCR_H - 9);
+  g.fillStyle = '#2c4f7c'; g.fillRect(62, SCR_H - 22, 96, 18);
+  g.fillStyle = '#cfe0f0'; g.font = '10px Tahoma, sans-serif';
+  g.fillText('плеер', 68, SCR_H - 9);
+  const sec = Math.floor(t) % 60;
+  g.textAlign = 'right'; g.font = '11px Tahoma, sans-serif'; g.fillStyle = '#dfe9f5';
+  g.fillText('21:4' + (Math.floor(sec / 10) % 10), SCR_W - 8, SCR_H - 9);
+  // цветок аськи мигает
+  if (Math.sin(t * 3.2) > 0) {
+    g.fillStyle = '#e8c14a';
+    g.beginPath(); g.arc(SCR_W - 58, SCR_H - 13, 5, 0, 6.284); g.fill();
+  }
+
+  // строчки кинескопа
+  g.globalAlpha = 0.10; g.fillStyle = '#000';
+  for (let y = 0; y < SCR_H; y += 3) g.fillRect(0, y, SCR_W, 1);
+  g.globalAlpha = 1;
+}
+
+// ============================== мир ==============================
+let world = null, screenMesh = null, monitor = null;
+let items = [];                 // все интерактивные предметы
+let roomMats = [];              // материалы комнаты — им подменяем лайтмап
+let lmOn = null, lmOff = null;  // две запечённые карты: свет включён / выключен
+const player = { pos:new THREE.Vector3(), vel:new THREE.Vector3(),
+                 eye:1.65, radius:0.26, crouch:0, bob:0 };
+const state = { monitorOn:false, lightOn:false };
+
+// выключатель мгновенно подменяет запечённую карту — как настоящий щелчок
+function setLight(on) {
+  state.lightOn = on;
+  const tex = on ? lmOn : lmOff;
+  if (!tex) return;
+  for (const m of roomMats) { m.map = tex; m.needsUpdate = true; }
+}
+
+function aabbHit(px, pz, yLo, yHi) {
+  const r = player.radius, rm = world.room;
+  if (px - r < rm.min[0] || px + r > rm.max[0]) return true;
+  if (pz - r < rm.min[2] || pz + r > rm.max[2]) return true;
+  for (const c of world.colliders) {
+    if (yHi < c.min[1] || yLo > c.max[1]) continue;
+    if (px + r > c.min[0] && px - r < c.max[0] &&
+        pz + r > c.min[2] && pz - r < c.max[2]) return true;
+  }
+  return false;
+}
+
+const fwd = new THREE.Vector3(), right = new THREE.Vector3(), wish = new THREE.Vector3();
+const toAim = new THREE.Vector3();
+
+function step(dt, t) {
+  const run = keys['ShiftLeft'] || keys['ShiftRight'];
+  const duck = keys['KeyC'];
+  player.crouch += ((duck ? 0.62 : 0) - player.crouch) * Math.min(1, dt * 9);
+
+  wish.set(0,0,0);
+  if (keys['KeyW'] || keys['ArrowUp'])    wish.z -= 1;
+  if (keys['KeyS'] || keys['ArrowDown'])  wish.z += 1;
+  if (keys['KeyA'] || keys['ArrowLeft'])  wish.x -= 1;
+  if (keys['KeyD'] || keys['ArrowRight']) wish.x += 1;
+
+  const speed = (run ? 2.5 : 1.35) * (duck ? 0.45 : 1);
+  if (wish.lengthSq() > 0) {
+    wish.normalize();
+    camera.getWorldDirection(fwd); fwd.y = 0; fwd.normalize();
+    right.crossVectors(fwd, camera.up).normalize();
+    const mv = new THREE.Vector3().addScaledVector(fwd, -wish.z)
+                                  .addScaledVector(right, wish.x)
+                                  .normalize().multiplyScalar(speed);
+    player.vel.lerp(mv, Math.min(1, dt * 12));
+  } else {
+    player.vel.lerp(new THREE.Vector3(), Math.min(1, dt * 14));
+  }
+
+  const yLo = 0.10, yHi = player.eye - player.crouch + 0.10;
+  const nx = player.pos.x + player.vel.x * dt, nz = player.pos.z + player.vel.z * dt;
+  if (!aabbHit(nx, player.pos.z, yLo, yHi)) player.pos.x = nx; else player.vel.x = 0;
+  if (!aabbHit(player.pos.x, nz, yLo, yHi)) player.pos.z = nz; else player.vel.z = 0;
+
+  const sp = Math.hypot(player.vel.x, player.vel.z);
+  player.bob += dt * sp * (run ? 11 : 8.5);
+  const k = Math.min(sp / 1.4, 1);
+  controls.object.position.set(
+    player.pos.x + Math.cos(player.bob * 0.5) * 0.012 * k,
+    player.eye - player.crouch + Math.sin(player.bob) * 0.018 * k,
+    player.pos.z);
+}
+
+// наведение: угол и дистанция до точки действия — надёжнее луча в тесной комнате
+function findAim() {
+  if (!items.length) return null;
+  const eye = controls.object.position;
+  camera.getWorldDirection(fwd);
+  let best = null, bestDot = 0.955;        // ~17 градусов
+  for (const it of items) {
+    toAim.set(it.aim.center[0], it.aim.center[1], it.aim.center[2]).sub(eye);
+    if (toAim.length() > 2.2) continue;
+    const dot = toAim.normalize().dot(fwd);
+    if (dot > bestDot) { bestDot = dot; best = it; }
+  }
+  return best;
+}
+
+function isOn(it) { return it.id === 'monitor' ? state.monitorOn : state.lightOn; }
+
+function tryInteract() {
+  if (!controls.isLocked) return;
+  const it = findAim();
+  if (!it) return;
+  if (it.id === 'monitor') {
+    state.monitorOn = !state.monitorOn;
+    if (state.monitorOn) bootT = 0;
+  } else if (it.id === 'ceiling') {
+    setLight(!state.lightOn);
+  }
+}
+
+// ============================== загрузка ==============================
+let ready = false, frames = 0, fpsT = 0;
+
+async function boot() {
+  try {
+    els.bar.style.width = '10%';
+    world = await (await fetch(COLLIDERS)).json();
+    player.pos.set(world.spawn[0], 0, world.spawn[2]);
+    player.eye = world.eyeHeight ?? 1.65;
+    player.radius = world.playerRadius ?? 0.26;
+    controls.object.rotation.y = world.spawnYaw ?? 0;
+    items = world.interactables || [];
+    monitor = items.find(i => i.id === 'monitor') || null;
+    els.bar.style.width = '20%';
+
+    // две запечённые карты освещения
+    const tl = new THREE.TextureLoader();
+    [lmOn, lmOff] = await Promise.all([
+      tl.loadAsync(TEXDIR + world.lightmaps.on),
+      tl.loadAsync(TEXDIR + world.lightmaps.off),
+    ]);
+    for (const t of [lmOn, lmOff]) {
+      t.colorSpace = THREE.SRGBColorSpace;
+      t.flipY = false;                    // развёртка из glTF идёт снизу вверх
+      t.anisotropy = 8;
+      t.generateMipmaps = true;
+    }
+    els.bar.style.width = '38%';
+
+    const gltf = await new GLTFLoader().loadAsync(MODEL, e => {
+      if (e.total) els.bar.style.width = (38 + 54 * e.loaded / e.total).toFixed(0) + '%';
+    });
+
+    let tris = 0;
+    roomMats = [];
+    gltf.scene.traverse(o => {
+      if (!o.isMesh) return;
+      tris += o.geometry.index ? o.geometry.index.count/3 : o.geometry.attributes.position.count/3;
+      const m = new THREE.MeshBasicMaterial({ map: state.lightOn ? lmOn : lmOff });
+      patchRoomMaterial(m);
+      o.material = m;
+      roomMats.push(m);
+    });
+    scene.add(gltf.scene);
+
+    // двор за окном
+    const bdTex = await new THREE.TextureLoader().loadAsync(BACKDROP);
+    bdTex.colorSpace = THREE.SRGBColorSpace;
+    const backdrop = new THREE.Mesh(
+      new THREE.PlaneGeometry(17, 10.6),
+      new THREE.MeshBasicMaterial({ map:bdTex, depthWrite:false }));
+    backdrop.position.set(0, 3.1, -9.6);
+    scene.add(backdrop);
+
+    // плоскость экрана
+    if (monitor) {
+      const s = monitor.screen;
+      screenMesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(s.size[0], s.size[1]),
+        new THREE.MeshBasicMaterial({ map:scrTex, toneMapped:false }));
+      screenMesh.position.set(s.center[0], s.center[1], s.center[2]);
+      screenMesh.rotation.y = Math.PI / 2;         // повернуть лицом в +X
+      scene.add(screenMesh);
+      screenLight.pos.set(monitor.light.pos[0], monitor.light.pos[1], monitor.light.pos[2]);
+      screenLight.color.set(monitor.light.color);
+      uni.uScreenColor.value.set(screenLight.color.r, screenLight.color.g, screenLight.color.b);
+      screenLight.range.value = monitor.light.distance ?? 3.2;
+    }
+
+    els.bar.style.width = '100%';
+    els.stats.dataset.tris = Math.round(tris);
+    ready = true;
+
+    // режим съёмки: камера ставится параметрами адреса, захват мыши не нужен
+    if (SHOT) {
+      document.body.classList.add('shot');
+      const c = (SHOT_P.get('cam')  || '0.90,1.65,1.20').split(',').map(Number);
+      const l = (SHOT_P.get('look') || '-1.20,1.00,0.20').split(',').map(Number);
+      controls.object.position.set(c[0], c[1], c[2]);
+      controls.object.lookAt(l[0], l[1], l[2]);
+      state.monitorOn = SHOT_P.get('monitor') === '1';
+      setLight(SHOT_P.get('light') === '1');
+      if (state.monitorOn) {
+        bootT = 1;
+        screenLight.power.value = (monitor?.light.intensity ?? 3.4) * 0.32;
+      }
+      let n = 0;
+      const tick = () => (++n > 6) ? (window.__sceneReady = true) : requestAnimationFrame(tick);
+      requestAnimationFrame(tick);
+    }
+  } catch (e) {
+    els.err.textContent = 'Не загрузилось: ' + e.message +
+      ' — открывать нужно через локальный сервер, а не двойным кликом по файлу.';
+    console.error(e);
+  }
+}
+boot();
+
+// ============================== цикл ==============================
+const clock = new THREE.Clock();
+let tAcc = 0;
+renderer.setAnimationLoop(() => {
+  const dt = Math.min(clock.getDelta(), 0.05);
+  tAcc += dt;
+
+  if (ready && controls.isLocked) {
+    step(dt, tAcc);
+    const it = findAim();
+    els.cross.classList.toggle('hot', !!it);
+    els.prompt.classList.toggle('on', !!it);
+    if (it) els.promptText.textContent = isOn(it) ? it.labelOff : it.label;
+  } else {
+    els.prompt.classList.remove('on');
+    els.cross.classList.remove('hot');
+  }
+
+  if (ready) {
+    if (state.monitorOn && bootT < 1) bootT = Math.min(1, bootT + dt * 1.6);
+    drawScreen(tAcc, state.monitorOn);
+    scrTex.needsUpdate = true;
+    const target = state.monitorOn ? (monitor?.light.intensity ?? 3.4) * 0.32 : 0;
+    const flash  = state.monitorOn && bootT < 0.45 ? (0.45 - bootT) * 2.2 : 0;
+    screenLight.power.value += (target + flash - screenLight.power.value) * Math.min(1, dt * 7);
+  }
+
+  renderer.render(scene, camera);
+
+  frames++; fpsT += dt;
+  if (fpsT >= 0.5) {
+    els.stats.textContent = Math.round(frames/fpsT) + ' fps · ' + (els.stats.dataset.tris||0) + ' тр.';
+    frames = 0; fpsT = 0;
+  }
+});
+</script>
+</body>
+</html>
