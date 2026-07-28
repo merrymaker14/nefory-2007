@@ -460,16 +460,16 @@ function drawScreen(t, on) {
 
 // ============================== мир ==============================
 let world=null, screenMesh=null, monitor=null;
-let items=[], roomMats=[], lmOn=null, lmOff=null;
+let items=[], roomMats=[], propMats=[];
+let lmOn=null, lmOff=null, pmOn=null, pmOff=null;
 const player = { pos:new THREE.Vector3(), vel:new THREE.Vector3(),
                  eye:1.60, radius:0.26, crouch:0, bob:0 };
 const state = { monitorOn:false, lightOn:false };
 
 function setLight(on) {
   state.lightOn = on;
-  const tex = on ? lmOn : lmOff;
-  if (!tex) return;
-  for (const m of roomMats) { m.map = tex; m.needsUpdate = true; }
+  if (lmOn) for (const m of roomMats) { m.map = on ? lmOn : lmOff; m.needsUpdate = true; }
+  if (pmOn) for (const m of propMats) { m.map = on ? pmOn : pmOff; m.needsUpdate = true; }
 }
 
 function aabbHit(px, pz, yLo, yHi) {
@@ -565,13 +565,19 @@ async function boot() {
     monitor = items.find(i => i.id === 'monitor') || null;
 
     const LM = (TOUCH && world.lightmapsMobile) ? world.lightmapsMobile : world.lightmaps;
+    const PM = (TOUCH && world.propmapsMobile)  ? world.propmapsMobile  : world.propmaps;
     const BD = (TOUCH && world.backdropMobile) ? world.backdropMobile
                                                : (world.backdrop || 'backdrop_yard.png');
     els.bar.style.width = '20%';
 
+    // напитки запечены в отдельный маленький атлас: в общем на банку
+    // приходилось бы шестьдесят пикселей и этикетка превращалась в кашу
     const tl = new THREE.TextureLoader();
-    [lmOn, lmOff] = await Promise.all([tl.loadAsync(TEXDIR+LM.on), tl.loadAsync(TEXDIR+LM.off)]);
-    for (const t of [lmOn, lmOff]) {
+    [lmOn, lmOff, pmOn, pmOff] = await Promise.all([
+      tl.loadAsync(TEXDIR+LM.on), tl.loadAsync(TEXDIR+LM.off),
+      tl.loadAsync(TEXDIR+PM.on), tl.loadAsync(TEXDIR+PM.off),
+    ]);
+    for (const t of [lmOn, lmOff, pmOn, pmOff]) {
       t.colorSpace = THREE.SRGBColorSpace;
       t.flipY = false;                       // развёртка из glTF идёт снизу вверх
       t.anisotropy = TOUCH ? 2 : 8;
@@ -582,13 +588,17 @@ async function boot() {
       if (e.total) els.bar.style.width = (38 + 54*e.loaded/e.total).toFixed(0) + '%';
     });
 
-    let tris = 0; roomMats = [];
+    let tris = 0; roomMats = []; propMats = [];
+    const propKey = world.propMesh || 'PROPS';
     gltf.scene.traverse(o => {
       if (!o.isMesh) return;
       tris += o.geometry.index ? o.geometry.index.count/3 : o.geometry.attributes.position.count/3;
-      const m = new THREE.MeshBasicMaterial({ map: state.lightOn ? lmOn : lmOff });
+      const isProp = o.name.includes(propKey);
+      const m = new THREE.MeshBasicMaterial({
+        map: isProp ? (state.lightOn ? pmOn : pmOff) : (state.lightOn ? lmOn : lmOff) });
       patchRoomMaterial(m);
-      o.material = m; roomMats.push(m);
+      o.material = m;
+      (isProp ? propMats : roomMats).push(m);
     });
     scene.add(gltf.scene);
 

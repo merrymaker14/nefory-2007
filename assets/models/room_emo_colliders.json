@@ -253,5 +253,14 @@
   "off": "room_lm_off_2k.jpg"
  },
  "backdrop": "backdrop_yard.jpg",
- "backdropMobile": "backdrop_yard_1k.jpg"
+ "backdropMobile": "backdrop_yard_1k.jpg",
+ "propmaps": {
+  "on": "props_lm_on.jpg",
+  "off": "props_lm_off.jpg"
+ },
+ "propmapsMobile": {
+  "on": "props_lm_on_512.jpg",
+  "off": "props_lm_off_512.jpg"
+ },
+ "propMesh": "PROPS"
 }
